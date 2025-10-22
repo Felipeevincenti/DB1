@@ -187,10 +187,54 @@ SELECT CI.cuil
 		GROUP BY CI.cuil
     );
     
-
     
 
--- 16)Para conocer la disponibilidad de lugar en los cursos que empiezan en abril para
+-- 14) Alumnos que tengan todas sus cuotas pagas hasta la fecha.
+-- dni nombre apellido tel email direccion
+
+SELECT ALU.*
+	FROM `afatse`.`cuotas` CUO
+			INNER JOIN `afatse`.`alumnos` ALU ON CUO.dni = ALU.dni
+            WHERE fecha_pago <= CURDATE()
+            GROUP BY ALU.dni
+            HAVING ALU.dni NOT IN (
+				SELECT ALU.dni
+					FROM `afatse`.`cuotas` CUO
+						INNER JOIN `afatse`.`alumnos` ALU ON CUO.dni = ALU.dni
+					GROUP BY ALU.dni
+					HAVING SUM(fecha_pago IS NULL) >= 1
+            )
+            ORDER BY ALU.dni ASC;
+
+
+
+-- 15) Alumnos cuyo promedio supere al del curso que realizan. Mostrar dni, nombre y apellido,
+-- promedio y promedio del curso.
+-- dni nombre apellido avg( nota ) prome
+
+DROP TEMPORARY TABLE IF EXISTS `afatse`.`tt_prom_cursos`;
+
+CREATE TEMPORARY TABLE `afatse`.`tt_prom_cursos` (
+	SELECT CUR.nom_plan, CUR.nro_curso, AVG(EVA.nota) "prome"
+		FROM `afatse`.`cursos` CUR
+			INNER JOIN `afatse`.`evaluaciones` EVA ON CUR.nro_curso = EVA.nro_curso AND CUR.nom_plan = EVA.nom_plan
+            GROUP BY CUR.nom_plan, CUR.nro_curso
+);
+
+SELECT ALU.dni, ALU.nombre, ALU.apellido, AVG(EVA.nota), TTPC.prome
+	FROM `afatse`.`alumnos` ALU
+		INNER JOIN `afatse`.`inscripciones` INS ON ALU.dni = INS.dni
+		INNER JOIN `afatse`.`evaluaciones` EVA ON INS.nro_curso = EVA.nro_curso AND INS.nom_plan = EVA.nom_plan AND INS.dni = EVA.dni
+        INNER JOIN `afatse`.`tt_prom_cursos` TTPC ON INS.nro_curso = TTPC.nro_curso AND INS.nom_plan = TTPC.nom_plan
+        GROUP BY INS.nom_plan, INS.nro_curso, INS.dni, TTPC.prome
+        HAVING AVG(EVA.nota) > TTPC.prome
+        ORDER BY ALU.dni ASC;
+        
+DROP TEMPORARY TABLE `afatse`.`tt_prom_cursos`;
+
+
+
+-- 16)Para conocer la disponibilidad de lugar en los cursos que empiezan en abril, para
 -- lanzar una campaña se desea conocer la cantidad de alumnos inscriptos a los cursos
 -- que comienzan a partir del 1/04/2014 indicando: Plan de Capacitación, curso, fecha de
 -- inicio, salón, cantidad de alumnos inscriptos y diferencia con el cupo de alumnos
@@ -199,3 +243,15 @@ SELECT CI.cuil
 -- Ayuda: tener en cuenta el uso de los paréntesis y la precedencia de los operadores
 -- matemáticos.
 -- nro_curso fecha_ini salon cupo count( dni ) ( cupo - count( dni ) )
+
+-- cantidad de disponibilidad de lughar en cada curso que empieza en abril
+-- cantidad de alumnos inscriptos a los cursos que comienzan del 1-4-24
+
+SELECT CUR.nro_curso, CUR.fecha_ini, CUR.salon, CUR.cupo, COUNT(INS.dni) "ocupados", (CUR.cupo - COUNT(INS.dni)) "cupos_disponibles"
+	FROM `afatse`.`inscripciones` INS
+        RIGHT JOIN `afatse`.`cursos` CUR ON INS.nom_plan = CUR.nom_plan AND INS.nro_curso = CUR.nro_curso
+        WHERE CUR.fecha_ini >= '2014-04-01'
+        GROUP BY CUR.nom_plan, CUR.nro_curso, CUR.fecha_ini
+        HAVING (((CUR.cupo - COUNT(INS.dni))/CUR.cupo)*100) > 80;
+        
+
